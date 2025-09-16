@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D弾幕ゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        #gameContainer {
+            position: relative;
+            border: 2px solid #333;
+            background: linear-gradient(45deg, #001122, #002244);
+        }
+        
+        #gameCanvas {
+            display: block;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            z-index: 10;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #ccc;
+            font-size: 14px;
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            display: none;
+            z-index: 20;
+        }
+        
+        button {
+            background: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <div>スコア: <span id="score">0</span></div>
+            <div>ライフ: <span id="lives">3</span></div>
+            <div>ステージ: <span id="stage">1</span></div>
+            <div>撃破数: <span id="enemiesKilled">0</span> / <span id="enemiesToKill">5</span></div>
+        </div>
+        <div id="instructions">
+            WASD: 移動 | スペース: ショット | R: リスタート
+        </div>
+        <div id="gameOver">
+            <div>ゲームオーバー</div>
+            <div>最終スコア: <span id="finalScore">0</span></div>
+            <button onclick="restartGame()">リスタート</button>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
