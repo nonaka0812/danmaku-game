@@ -2,13 +2,69 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// レスポンシブ対応
+function resizeCanvas() {
+    const container = document.getElementById('gameContainer');
+    const maxWidth = Math.min(window.innerWidth - 20, 800);
+    const maxHeight = Math.min(window.innerHeight - 20, 600);
+    
+    const aspectRatio = 800 / 600;
+    let canvasWidth = maxWidth;
+    let canvasHeight = maxWidth / aspectRatio;
+    
+    if (canvasHeight > maxHeight) {
+        canvasHeight = maxHeight;
+        canvasWidth = maxHeight * aspectRatio;
+    }
+    
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    canvas.style.width = canvasWidth + 'px';
+    canvas.style.height = canvasHeight + 'px';
+}
+
+// デバイス検出
+function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+           (window.innerWidth <= 768);
+}
+
+// モバイルデバイス用の初期化
+function initMobileControls() {
+    if (isMobileDevice()) {
+        // タッチコントロールを表示
+        const touchControls = document.getElementById('touchControls');
+        if (touchControls) {
+            touchControls.style.display = 'block';
+        }
+        
+        // インストラクションを非表示
+        const instructions = document.getElementById('instructions');
+        if (instructions) {
+            instructions.style.display = 'none';
+        }
+        
+        // キャンバスサイズを調整
+        canvas.width = Math.min(window.innerWidth - 20, 800);
+        canvas.height = Math.min(window.innerHeight - 200, 600); // タッチコントロール分のスペースを確保
+    }
+}
+
+// 初期化時にキャンバスサイズを設定
+resizeCanvas();
+initMobileControls();
+window.addEventListener('resize', () => {
+    resizeCanvas();
+    initMobileControls();
+});
+
 // ステージ設定
 const stageConfigs = {
-    1: { enemiesToKill: 5, enemySpawnRate: 0.02, enemySpeed: 1.5, enemyHealth: 1, enemyShootRate: 0.8, hasBoss: false },
-    2: { enemiesToKill: 8, enemySpawnRate: 0.03, enemySpeed: 2.0, enemyHealth: 1, enemyShootRate: 0.9, hasBoss: false },
-    3: { enemiesToKill: 12, enemySpawnRate: 0.04, enemySpeed: 2.5, enemyHealth: 2, enemyShootRate: 1.0, hasBoss: true },
-    4: { enemiesToKill: 15, enemySpawnRate: 0.05, enemySpeed: 3.0, enemyHealth: 2, enemyShootRate: 1.1, hasBoss: true },
-    5: { enemiesToKill: 20, enemySpawnRate: 0.06, enemySpeed: 3.5, enemyHealth: 3, enemyShootRate: 1.2, hasBoss: true }
+    1: { enemiesToKill: 5, enemySpawnRate: 0.02, enemySpeed: 2.5, enemyHealth: 1, enemyShootRate: 0.8, hasBoss: false }, // 1.5 → 2.5
+    2: { enemiesToKill: 8, enemySpawnRate: 0.03, enemySpeed: 3.5, enemyHealth: 1, enemyShootRate: 0.9, hasBoss: false }, // 2.0 → 3.5
+    3: { enemiesToKill: 12, enemySpawnRate: 0.04, enemySpeed: 4.5, enemyHealth: 2, enemyShootRate: 1.0, hasBoss: true }, // 2.5 → 4.5
+    4: { enemiesToKill: 15, enemySpawnRate: 0.05, enemySpeed: 5.5, enemyHealth: 2, enemyShootRate: 1.1, hasBoss: true }, // 3.0 → 5.5
+    5: { enemiesToKill: 20, enemySpawnRate: 0.06, enemySpeed: 6.5, enemyHealth: 3, enemyShootRate: 1.2, hasBoss: true } // 3.5 → 6.5
 };
 
 // パワーアップの種類と効果
@@ -50,8 +106,100 @@ let gameState = {
     achievements: [],
     timeLimit: 0,
     slowMotion: false,
-    shield: 0
+    shield: 0,
+    frameCount: 0,
+    lastSpawnTime: 0
 };
+
+// パフォーマンス設定
+const PERFORMANCE_CONFIG = {
+    maxParticles: 50,
+    maxEnemies: 20,
+    maxBullets: 100,
+    particleLife: 30,
+    updateInterval: 2, // フレーム間隔
+    cullDistance: 100 // 画面外の距離で削除
+};
+
+// パフォーマンス最適化関数
+function optimizePerformance() {
+    // パーティクル数を制限
+    if (gameState.particles.length > PERFORMANCE_CONFIG.maxParticles) {
+        gameState.particles = gameState.particles.slice(-PERFORMANCE_CONFIG.maxParticles);
+    }
+    
+    // 敵の数を制限
+    if (gameState.enemies.length > PERFORMANCE_CONFIG.maxEnemies) {
+        gameState.enemies = gameState.enemies.slice(-PERFORMANCE_CONFIG.maxEnemies);
+    }
+    
+    // 弾丸の数を制限
+    if (gameState.bullets.length > PERFORMANCE_CONFIG.maxBullets) {
+        gameState.bullets = gameState.bullets.slice(-PERFORMANCE_CONFIG.maxBullets);
+    }
+    
+    if (gameState.enemyBullets.length > PERFORMANCE_CONFIG.maxBullets) {
+        gameState.enemyBullets = gameState.enemyBullets.slice(-PERFORMANCE_CONFIG.maxBullets);
+    }
+}
+
+// 画面外オブジェクトの削除
+function cullOffscreenObjects() {
+    // パーティクルの削除
+    gameState.particles = gameState.particles.filter(particle => 
+        particle.x > -PERFORMANCE_CONFIG.cullDistance && 
+        particle.x < canvas.width + PERFORMANCE_CONFIG.cullDistance &&
+        particle.y > -PERFORMANCE_CONFIG.cullDistance && 
+        particle.y < canvas.height + PERFORMANCE_CONFIG.cullDistance
+    );
+    
+    // 弾丸の削除
+    gameState.bullets = gameState.bullets.filter(bullet => 
+        bullet.x > -50 && bullet.x < canvas.width + 50 &&
+        bullet.y > -50 && bullet.y < canvas.height + 50
+    );
+    
+    gameState.enemyBullets = gameState.enemyBullets.filter(bullet => 
+        bullet.x > -50 && bullet.x < canvas.width + 50 &&
+        bullet.y > -50 && bullet.y < canvas.height + 50
+    );
+}
+
+// 障害物描画用ヘルパー関数
+function drawHexagon(ctx, x, y, radius, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI) / 3;
+        const px = x + radius * Math.cos(angle);
+        const py = y + radius * Math.sin(angle);
+        if (i === 0) {
+            ctx.moveTo(px, py);
+        } else {
+            ctx.lineTo(px, py);
+        }
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawDiamond(ctx, x, y, width, height, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y - height);
+    ctx.lineTo(x + width, y);
+    ctx.lineTo(x, y + height);
+    ctx.lineTo(x - width, y);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawCircle(ctx, x, y, radius, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+}
 
 // プレイヤーオブジェクト
 const player = {
@@ -59,7 +207,7 @@ const player = {
     y: canvas.height - 50,
     width: 20,
     height: 20,
-    speed: 5,
+    speed: 8, // 5 → 8 に増加
     shootCooldown: 0,
     invulnerable: 0,
     powerUps: {
@@ -69,8 +217,8 @@ const player = {
         explosive: false,
         multiShot: 0
     },
-    baseSpeed: 5,
-    baseShootCooldown: 10
+    baseSpeed: 8, // 5 → 8 に増加
+    baseShootCooldown: 8 // 10 → 8 に減少（より速い連射）
 };
 
 // キーボード入力の処理
@@ -85,6 +233,115 @@ document.addEventListener('keyup', (e) => {
     gameState.keys[e.code] = false;
 });
 
+// タッチ操作の処理
+let touchState = {
+    movePad: { active: false, x: 0, y: 0 },
+    shootButton: { active: false }
+};
+
+// タッチイベント
+document.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touches = e.touches;
+    
+    for (let i = 0; i < touches.length; i++) {
+        const touch = touches[i];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        // 移動パッドの判定
+        const movePad = document.getElementById('movePad');
+        const movePadRect = movePad.getBoundingClientRect();
+        const movePadX = movePadRect.left - rect.left;
+        const movePadY = movePadRect.top - rect.top;
+        const movePadSize = movePadRect.width;
+        
+        if (x >= movePadX && x <= movePadX + movePadSize && 
+            y >= movePadY && y <= movePadY + movePadSize) {
+            touchState.movePad.active = true;
+            touchState.movePad.x = x - movePadX - movePadSize / 2;
+            touchState.movePad.y = y - movePadY - movePadSize / 2;
+        }
+        
+        // ショットボタンの判定
+        const shootButton = document.getElementById('shootButton');
+        const shootRect = shootButton.getBoundingClientRect();
+        const shootX = shootRect.left - rect.left;
+        const shootY = shootRect.top - rect.top;
+        const shootSize = shootRect.width;
+        
+        if (x >= shootX && x <= shootX + shootSize && 
+            y >= shootY && y <= shootY + shootSize) {
+            touchState.shootButton.active = true;
+            gameState.keys['Space'] = true;
+        }
+    }
+});
+
+document.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touches = e.touches;
+    
+    for (let i = 0; i < touches.length; i++) {
+        const touch = touches[i];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        if (touchState.movePad.active) {
+            const movePad = document.getElementById('movePad');
+            const movePadRect = movePad.getBoundingClientRect();
+            const movePadX = movePadRect.left - rect.left;
+            const movePadY = movePadRect.top - rect.top;
+            const movePadSize = movePadRect.width;
+            
+            touchState.movePad.x = x - movePadX - movePadSize / 2;
+            touchState.movePad.y = y - movePadY - movePadSize / 2;
+            
+            // 移動パッドの範囲内に制限
+            const maxDistance = movePadSize / 2 - 10;
+            const distance = Math.sqrt(touchState.movePad.x * touchState.movePad.x + touchState.movePad.y * touchState.movePad.y);
+            if (distance > maxDistance) {
+                touchState.movePad.x = (touchState.movePad.x / distance) * maxDistance;
+                touchState.movePad.y = (touchState.movePad.y / distance) * maxDistance;
+            }
+        }
+    }
+});
+
+document.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    touchState.movePad.active = false;
+    touchState.shootButton.active = false;
+    gameState.keys['Space'] = false;
+});
+
+// マウス操作（デスクトップ用）
+document.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // ショットボタンの判定
+    const shootButton = document.getElementById('shootButton');
+    const shootRect = shootButton.getBoundingClientRect();
+    const shootX = shootRect.left - rect.left;
+    const shootY = shootRect.top - rect.top;
+    const shootSize = shootRect.width;
+    
+    if (x >= shootX && x <= shootX + shootSize && 
+        y >= shootY && y <= shootY + shootSize) {
+        gameState.keys['Space'] = true;
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    e.preventDefault();
+    gameState.keys['Space'] = false;
+});
+
 // プレイヤーの更新
 function updatePlayer() {
     if (!gameState.running) return;
@@ -95,6 +352,7 @@ function updatePlayer() {
     // 移動処理（スローモーション効果を考慮）
     const moveSpeed = gameState.slowMotion ? player.speed * 0.5 : player.speed;
     
+    // キーボード操作
     if (gameState.keys['KeyA'] && player.x > 0) {
         player.x -= moveSpeed;
     }
@@ -106,6 +364,20 @@ function updatePlayer() {
     }
     if (gameState.keys['KeyS'] && player.y < canvas.height - player.height) {
         player.y += moveSpeed;
+    }
+    
+    // タッチ操作
+    if (touchState.movePad.active) {
+        const sensitivity = 0.1;
+        const moveX = touchState.movePad.x * sensitivity;
+        const moveY = touchState.movePad.y * sensitivity;
+        
+        player.x += moveX;
+        player.y += moveY;
+        
+        // 画面外に出ないように制限
+        player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+        player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
     }
     
     // ショット処理
@@ -167,10 +439,10 @@ function shootBullet() {
         y: centerY,
         width: 4,
         height: 10,
-        speed: 8,
+        speed: 12, // 8 → 12 に増加
         color: '#00ff00',
         vx: 0,
-        vy: -8,
+        vy: -12, // -8 → -12 に増加
         bounces: 0,
         maxBounces: player.powerUps.maxBounces || 1,
         piercing: player.powerUps.piercing > 0,
@@ -182,14 +454,14 @@ function shootBullet() {
     if (player.powerUps.multiShot > 0) {
         const angles = [-0.3, 0.3]; // 左右に30度
         angles.forEach(angle => {
-            const vx = Math.sin(angle) * 8;
-            const vy = Math.cos(angle) * 8;
+            const vx = Math.sin(angle) * 12; // 8 → 12 に増加
+            const vy = Math.cos(angle) * 12; // 8 → 12 に増加
             gameState.bullets.push({
                 x: centerX - 2,
                 y: centerY,
                 width: 4,
                 height: 10,
-                speed: 8,
+                speed: 12, // 8 → 12 に増加
                 color: '#00ff00',
                 vx: vx,
                 vy: vy,
@@ -222,7 +494,7 @@ function updateBullets() {
                 if (bullet.x <= 0) bullet.x = 0;
                 if (bullet.x >= canvas.width - bullet.width) bullet.x = canvas.width - bullet.width;
             } else {
-                gameState.bullets.splice(i, 1);
+            gameState.bullets.splice(i, 1);
                 continue;
             }
         }
@@ -280,10 +552,15 @@ function updateBullets() {
 
 // 敵の生成
 function spawnEnemy() {
-    if (gameState.stageComplete) return;
+    if (gameState.stageComplete || gameState.enemies.length >= PERFORMANCE_CONFIG.maxEnemies) return;
     
     const config = stageConfigs[gameState.stage];
-    if (Math.random() < config.enemySpawnRate) {
+    const currentTime = Date.now();
+    
+    // 生成間隔を制御
+    if (currentTime - gameState.lastSpawnTime < 1000 / config.enemySpawnRate) return;
+    
+    if (Math.random() < config.enemySpawnRate * 0.5) { // 生成確率を下げる
         // ステージに応じた敵タイプの選択
         const selectedType = selectEnemyType(gameState.stage);
         
@@ -301,6 +578,8 @@ function spawnEnemy() {
             angle: 0, // 螺旋弾用
             shootPattern: 0 // パターン切り替え用
         });
+        
+        gameState.lastSpawnTime = currentTime;
     }
 }
 
@@ -397,7 +676,7 @@ function createEnemyBulletPattern(enemy) {
 
 // 基本パターン（直線弾）
 function createBasicPattern(centerX, centerY, config) {
-    const speed = 2 + config.enemyShootRate;
+    const speed = 4 + config.enemyShootRate; // 2 → 4 に増加
     gameState.enemyBullets.push({
         x: centerX,
         y: centerY,
@@ -414,7 +693,7 @@ function createBasicPattern(centerX, centerY, config) {
 // 円形弾幕パターン
 function createCircularPattern(centerX, centerY, config) {
     const bulletCount = 8 + Math.floor(config.enemyShootRate * 2);
-    const speed = 1.5 + config.enemyShootRate * 0.5;
+    const speed = 3 + config.enemyShootRate * 0.8; // 1.5 → 3 に増加
     
     // 二重円形弾幕（高ステージ）
     if (config.enemyShootRate > 1.0) {
@@ -433,11 +712,11 @@ function createCircularPattern(centerX, centerY, config) {
                 type: 'circular'
             });
             // 外側の円
-            gameState.enemyBullets.push({
-                x: centerX,
-                y: centerY,
-                width: 4,
-                height: 4,
+        gameState.enemyBullets.push({
+            x: centerX,
+            y: centerY,
+            width: 4,
+            height: 4,
                 speed: speed * 1.2,
                 vx: Math.cos(angle) * speed * 1.2,
                 vy: Math.sin(angle) * speed * 1.2,
@@ -466,7 +745,7 @@ function createCircularPattern(centerX, centerY, config) {
 
 // 螺旋弾幕パターン
 function createSpiralPattern(centerX, centerY, enemy, config) {
-    const speed = 1.2 + config.enemyShootRate * 0.3;
+    const speed = 2.5 + config.enemyShootRate * 0.6; // 1.2 → 2.5 に増加
     const spiralCount = 3 + Math.floor(config.enemyShootRate);
     
     // 逆回転の螺旋も追加（高ステージ）
@@ -474,10 +753,10 @@ function createSpiralPattern(centerX, centerY, enemy, config) {
     
     for (let i = 0; i < spiralCount; i++) {
         const angle = enemy.angle + (i / spiralCount) * Math.PI * 2;
-        gameState.enemyBullets.push({
-            x: centerX,
-            y: centerY,
-            width: 3,
+    gameState.enemyBullets.push({
+        x: centerX,
+        y: centerY,
+        width: 3,
             height: 3,
             speed: speed,
             vx: Math.cos(angle) * speed,
@@ -506,7 +785,7 @@ function createSpiralPattern(centerX, centerY, enemy, config) {
 
 // 追尾弾パターン
 function createHomingPattern(centerX, centerY, config) {
-    const speed = 1.8 + config.enemyShootRate * 0.4;
+    const speed = 3.5 + config.enemyShootRate * 0.8; // 1.8 → 3.5 に増加
     
     // プレイヤーへの方向を計算
     const dx = player.x + player.width / 2 - centerX;
@@ -594,7 +873,7 @@ function checkCollisions() {
                 }
                 
                 if (enemy.health <= 0) {
-                    gameState.enemies.splice(j, 1);
+                gameState.enemies.splice(j, 1);
                     gameState.enemiesKilled++;
                     gameState.combo++;
                     gameState.maxCombo = Math.max(gameState.maxCombo, gameState.combo);
@@ -603,7 +882,7 @@ function checkCollisions() {
                     const comboBonus = Math.floor(gameState.combo / 5) * 50;
                     gameState.score += (100 * gameState.stage) + comboBonus;
                     
-                    createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
                     
                     // パワーアップドロップ
                     if (Math.random() < 0.15) {
@@ -638,13 +917,13 @@ function checkCollisions() {
                     gameState.shield = 0;
                     createShieldEffect(player.x + player.width / 2, player.y + player.height / 2);
                 } else {
-                    gameState.lives--;
+                gameState.lives--;
                     gameState.combo = 0; // コンボリセット
-                    player.invulnerable = 120; // 2秒間無敵
-                    createExplosion(player.x + player.width / 2, player.y + player.height / 2);
-                    
-                    if (gameState.lives <= 0) {
-                        gameOver();
+                player.invulnerable = 120; // 2秒間無敵
+                createExplosion(player.x + player.width / 2, player.y + player.height / 2);
+                
+                if (gameState.lives <= 0) {
+                    gameOver();
                     }
                 }
                 break;
@@ -896,9 +1175,9 @@ function createBossBasicPattern(centerX, centerY) {
             y: centerY,
             width: 6,
             height: 6,
-            speed: 3,
-            vx: Math.sin(angle) * 3,
-            vy: Math.cos(angle) * 3,
+            speed: 5, // 3 → 5 に増加
+            vx: Math.sin(angle) * 5, // 3 → 5 に増加
+            vy: Math.cos(angle) * 5, // 3 → 5 に増加
             color: '#ff0000',
             type: 'boss'
         });
@@ -915,9 +1194,9 @@ function createBossCircularPattern(centerX, centerY) {
             y: centerY,
             width: 5,
             height: 5,
-            speed: 2.5,
-            vx: Math.cos(angle) * 2.5,
-            vy: Math.sin(angle) * 2.5,
+            speed: 4.5, // 2.5 → 4.5 に増加
+            vx: Math.cos(angle) * 4.5, // 2.5 → 4.5 に増加
+            vy: Math.sin(angle) * 4.5, // 2.5 → 4.5 に増加
             color: '#ff6600',
             type: 'boss'
         });
@@ -936,9 +1215,9 @@ function createBossSpiralPattern(centerX, centerY, boss) {
             y: centerY,
             width: 4,
             height: 4,
-            speed: 2,
-            vx: Math.cos(angle) * 2,
-            vy: Math.sin(angle) * 2,
+            speed: 4, // 2 → 4 に増加
+            vx: Math.cos(angle) * 4, // 2 → 4 に増加
+            vy: Math.sin(angle) * 4, // 2 → 4 に増加
             color: '#ffaa00',
             type: 'boss'
         });
@@ -971,7 +1250,8 @@ function nextStage() {
 
 // ダメージエフェクト
 function createDamageEffect(x, y) {
-    for (let i = 0; i < 5; i++) {
+    const particleCount = Math.min(3, PERFORMANCE_CONFIG.maxParticles - gameState.particles.length);
+    for (let i = 0; i < particleCount; i++) {
         gameState.particles.push({
             x: x,
             y: y,
@@ -1133,14 +1413,15 @@ function createClearBombEffect() {
 
 // 爆発エフェクト
 function createExplosion(x, y) {
-    for (let i = 0; i < 10; i++) {
+    const particleCount = Math.min(8, PERFORMANCE_CONFIG.maxParticles - gameState.particles.length);
+    for (let i = 0; i < particleCount; i++) {
         gameState.particles.push({
             x: x,
             y: y,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8,
-            life: 30,
-            maxLife: 30,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            life: PERFORMANCE_CONFIG.particleLife,
+            maxLife: PERFORMANCE_CONFIG.particleLife,
             color: `hsl(${Math.random() * 60 + 20}, 100%, 60%)`
         });
     }
@@ -1229,8 +1510,8 @@ function draw() {
         switch (enemy.type) {
             case 'basic':
                 // 基本敵：シンプルな四角
-                ctx.fillStyle = '#ffaaaa';
-                ctx.fillRect(enemy.x + 3, enemy.y + 3, enemy.width - 6, enemy.height - 6);
+        ctx.fillStyle = '#ffaaaa';
+        ctx.fillRect(enemy.x + 3, enemy.y + 3, enemy.width - 6, enemy.height - 6);
                 break;
             case 'circular':
                 // 円形弾幕敵：円形のマーク
@@ -1347,28 +1628,63 @@ function draw() {
     
     // 障害物の描画
     gameState.obstacles.forEach(obstacle => {
-        ctx.fillStyle = obstacle.color;
-        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+        const centerX = obstacle.x + obstacle.width / 2;
+        const centerY = obstacle.y + obstacle.height / 2;
+        const pulseScale = 1 + Math.sin(obstacle.pulse) * 0.1;
         
-        // 障害物の詳細（より明るい色）
-        ctx.fillStyle = obstacle.type === 'moving' ? '#A0522D' : '#A9A9A9';
-        ctx.fillRect(obstacle.x + 2, obstacle.y + 2, obstacle.width - 4, obstacle.height - 4);
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.scale(pulseScale, pulseScale);
         
-        // 移動障害物の矢印
         if (obstacle.type === 'moving') {
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('→', obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2 + 5);
-            ctx.textAlign = 'left';
-        } else {
-            // 静的障害物のマーク
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('■', obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2 + 4);
-            ctx.textAlign = 'left';
+            ctx.rotate(obstacle.rotation);
         }
+        
+        // パターンに応じた描画
+        switch (obstacle.pattern) {
+            case 0: // 六角形
+                drawHexagon(ctx, 0, 0, obstacle.width / 2, obstacle.color);
+                break;
+            case 1: // ダイヤモンド
+                drawDiamond(ctx, 0, 0, obstacle.width / 2, obstacle.height / 2, obstacle.color);
+                break;
+            case 2: // 円形
+                drawCircle(ctx, 0, 0, obstacle.width / 2, obstacle.color);
+                break;
+        }
+        
+        // 内側の装飾
+        const innerColor = obstacle.type === 'moving' ? '#A0522D' : '#A9A9A9';
+        const innerSize = obstacle.width / 3;
+        
+        switch (obstacle.pattern) {
+            case 0:
+                drawHexagon(ctx, 0, 0, innerSize, innerColor);
+                break;
+            case 1:
+                drawDiamond(ctx, 0, 0, innerSize, innerSize, innerColor);
+                break;
+            case 2:
+                drawCircle(ctx, 0, 0, innerSize, innerColor);
+                break;
+        }
+        
+        // タイプ別のマーク
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (obstacle.type === 'moving') {
+            // 回転する矢印
+            ctx.rotate(obstacle.rotation * 2);
+            ctx.fillText('⚡', 0, 0);
+        } else {
+            // 静的マーク
+            ctx.fillText('⬢', 0, 0);
+        }
+        
+        ctx.restore();
     });
     
     // パーティクルの描画
@@ -1377,25 +1693,71 @@ function draw() {
         ctx.fillStyle = particle.color.replace(')', `, ${alpha})`).replace('hsl', 'hsla');
         ctx.fillRect(particle.x, particle.y, 3, 3);
     });
+    
+    // タッチコントロールの視覚的フィードバック
+    if (touchState.movePad.active) {
+        const movePad = document.getElementById('movePad');
+        const rect = movePad.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+        
+        const padX = rect.left - canvasRect.left + rect.width / 2;
+        const padY = rect.top - canvasRect.top + rect.height / 2;
+        
+        // 移動パッドの中心
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(padX, padY, rect.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 現在のタッチ位置
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath();
+        ctx.arc(padX + touchState.movePad.x, padY + touchState.movePad.y, 15, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    if (touchState.shootButton.active) {
+        const shootButton = document.getElementById('shootButton');
+        const rect = shootButton.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+        
+        const buttonX = rect.left - canvasRect.left + rect.width / 2;
+        const buttonY = rect.top - canvasRect.top + rect.height / 2;
+        
+        // ショットボタンのハイライト
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+        ctx.beginPath();
+        ctx.arc(buttonX, buttonY, rect.width / 2 + 5, 0, Math.PI * 2);
+        ctx.fill();
+    }
 }
 
 // ゲームループ
 function gameLoop() {
+    gameState.frameCount++;
+    
     if (gameState.running) {
+        // フレーム間隔制御
+        if (gameState.frameCount % PERFORMANCE_CONFIG.updateInterval === 0) {
         updatePlayer();
         updateBullets();
         spawnEnemy();
         updateEnemies();
-        updateBoss();
-        updatePowerUps();
-        updateItems();
-        updateObstacles();
-        spawnObstacle();
-        spawnWarpPoint();
-        applyGravityField();
+            updateBoss();
+            updatePowerUps();
+            updateItems();
+            updateObstacles();
+            spawnObstacle();
+            spawnWarpPoint();
+            applyGravityField();
         updateParticles();
         checkCollisions();
-        checkAchievements();
+            checkAchievements();
+        }
+        
+        // 毎フレーム実行
+        cullOffscreenObjects();
+        optimizePerformance();
         updateUI();
     }
     
@@ -1447,7 +1809,13 @@ function updateObstacles() {
             if (obstacle.y <= 0 || obstacle.y >= canvas.height - obstacle.height) {
                 obstacle.vy = -obstacle.vy;
             }
+            
+            // 回転アニメーション
+            obstacle.rotation += 0.02;
         }
+        
+        // パルスアニメーション
+        obstacle.pulse += 0.1;
         
         obstacle.life--;
         if (obstacle.life <= 0) {
@@ -1465,11 +1833,14 @@ function spawnObstacle() {
         const obstacle = {
             x: Math.random() * (canvas.width - 40),
             y: Math.random() * (canvas.height - 40),
-            width: 30 + Math.random() * 20,
-            height: 30 + Math.random() * 20,
+            width: 40 + Math.random() * 20,
+            height: 40 + Math.random() * 20,
             type: type,
             life: 1800, // 30秒
-            color: type === 'moving' ? '#8B4513' : '#696969' // 動的は茶色、静的は灰色
+            color: type === 'moving' ? '#8B4513' : '#696969', // 動的は茶色、静的は灰色
+            pattern: Math.floor(Math.random() * 3), // デザインパターン
+            rotation: 0,
+            pulse: 0
         };
         
         if (type === 'moving') {
